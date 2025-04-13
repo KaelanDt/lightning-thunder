@@ -152,7 +152,8 @@ def grad_transform_on_trace(trace, /, *args, **kwargs):
                         flat_inps = args
 
                         for i, gi in zip(flat_inps, grad_inps, strict=True):  # strict?
-                            prims.put_grad(i, gi)
+                            if isinstance(i, thunder.TensorProxy):
+                                prims.put_grad(i, gi)
                         return res
 
             if joint_forward_backward is not None:
