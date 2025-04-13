@@ -34,15 +34,33 @@ def grad_transform_on_trace(trace, /, *args, **kwargs):
 
         def process_bsym(self, bsym: thunder.core.symbol.BoundSymbol) -> None:
             if bsym.sym is prims.python_return:
-                # todo: need to map? in particular outputs!!!
+                # This is big (and a big messy):
+                # the return (of the input trace) signals the end of the forward processing
+                # all the backwards will have been put in self.collected_bw_part_syms
+                # special symbols are
+                # - get_grad "reads" the gradient of a variable from the forward to compute with it
+                #   (if you are used to torch.autograd.Function, this is a "grad_out" in the arguments
+                #    of the backward static method)
+                # - put_grad "writes" a computed gradients (similar to returning the "grad_in" in t.a.F)
+                # The backward computation in self.collected_bw_part_syms is in the oder of th
+                # backward computation.
+                #
                 input_proxy_names = {p.name for p in bsym.args[0]["flat_args"] if isinstance(p, thunder.Proxy)}
                 output_proxy_names = set()
                 for o in thunder.core.pytree.tree_iter(bsym.args[0]["output"]):
                     if isinstance(o, thunder.Proxy):
                         output_proxy_names.add(self.read(o).name)
                 grad_proxy_map = {}
+
+                # we iterate through the collected symbols in order
                 for nbsym in self.collected_bw_part_bsyms:
                     if nbsym.sym == prims.put_grad:
+                        # put_grad adds something to the gradients
+                        # - if it is an output of the function, we also need to get the
+                        #   "grad_output" (but only once)
+                        # - if we already had a gradient, we need to add the new component
+                        # - structurally (for correctness), there should be no put_grad
+                        #   after a get_grad
                         p = self.env.get(nbsym.args[0].name, nbsym.args[0])
                         current_grad = grad_proxy_map.get(p.name)
                         new_grad = nbsym.args[1]
@@ -90,6 +108,7 @@ def grad_transform_on_trace(trace, /, *args, **kwargs):
                 self.set_result(bsym.output)
                 return
 
+            # constant for gradients (no grad required)
             if is_constant_for_vjp(bsym):
                 if bsym.sym.name == "synchronize":
                     # This is a *really* terrible hack to cope with non-grad-needing sharded tensors
