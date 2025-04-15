@@ -239,7 +239,7 @@ def split_into_forward_and_backward(joint_trace):
         saved_for_backward.update(
             (a.name, a)
             for a in bsym.flat_proxy_args
-            if a.name in forward_proxy_names and a.name not in backward_part_bsyms
+            if a.name in forward_proxy_names and a.name not in saved_for_backward
         )
     saved_for_backward_tensors = [p for p in saved_for_backward.values() if isinstance(p, thunder.TensorProxy)]
     saved_for_backward_other = [p for p in saved_for_backward.values() if not isinstance(p, thunder.TensorProxy)]
