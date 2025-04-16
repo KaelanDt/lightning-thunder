@@ -53,44 +53,53 @@ def grad_transform_on_trace(trace, /, *args, **kwargs):
                 grad_proxy_map = {}
 
                 # we iterate through the collected symbols in order
-                for nbsym in self.collected_bw_part_bsyms:
-                    if nbsym.sym == prims.put_grad:
-                        # put_grad adds something to the gradients
-                        # - if it is an output of the function, we also need to get the
-                        #   "grad_output" (but only once)
-                        # - if we already had a gradient, we need to add the new component
-                        # - structurally (for correctness), there should be no put_grad
-                        #   after a get_grad
-                        p = self.env.get(nbsym.args[0].name, nbsym.args[0])
-                        current_grad = grad_proxy_map.get(p.name)
-                        new_grad = nbsym.args[1]
-                        if current_grad is None and p.name in output_proxy_names:
-                            self.new_trace.push_scope([])
-                            current_grad = prims.get_grad(p)
-                            self.add_processed_bsyms(self.new_trace.pop_scope())
+                for bw_bsyms in self.collected_bw_part_bsyms:
+                    # if we don't have and grad_outs, we know that the grad_ins are not needed, so we don't compute them
+                    # (e.g. for `where(a * b > 0, a, b)` we do not need the grad components of a * b propagated
+                    if any(
+                        ((gg.name in grad_proxy_map) or (gg.name in output_proxy_names))
+                        for gg in (bs.args[0] for bs in bw_bsyms)
+                    ):
+                        for nbsym in bw_bsyms:
+                            if nbsym.sym == prims.put_grad:
+                                # put_grad adds something to the gradients
+                                # - if it is an output of the function, we also need to get the
+                                #   "grad_output" (but only once)
+                                # - if we already had a gradient, we need to add the new component
+                                # - structurally (for correctness), there should be no put_grad
+                                #   after a get_grad
+                                p = self.env.get(nbsym.args[0].name, nbsym.args[0])
+                                current_grad = grad_proxy_map.get(p.name)
+                                new_grad = nbsym.args[1]
+                                if current_grad is None and p.name in output_proxy_names:
+                                    self.new_trace.push_scope([])
+                                    current_grad = prims.get_grad(p)
+                                    self.add_processed_bsyms(self.new_trace.pop_scope())
 
-                        if current_grad is not None:
-                            new_grad = self.add_bsyms_from_function(thunder.torch.add, current_grad, new_grad)
+                                if current_grad is not None:
+                                    new_grad = self.add_bsyms_from_function(thunder.torch.add, current_grad, new_grad)
 
-                        grad_proxy_map[p.name] = new_grad
-                        self.write(new_grad, new_grad)
-                    elif nbsym.sym == prims.get_grad:
-                        p = nbsym.args[0]
-                        # TODO: set requires grad here!
-                        name = p.name
-                        current_grad = grad_proxy_map.get(name)
-                        if current_grad is not None:
-                            # do we also need to map?
-                            self.write(nbsym.output, current_grad)
-                            self.swap_map[thunder.core.proxies.variableify(nbsym.output)] = current_grad
-                            # XXX_replace_output_with_current_grad
-                        elif name in output_proxy_names:
-                            new_grad = self.add_processed_bsyms([nbsym.from_bsym()])
-                            grad_proxy_map[name] = new_grad
-                        else:
-                            raise RuntimeError(f"grad of non-output and non-intermediate {name} requested")
-                    else:
-                        self.add_processed_bsyms([nbsym.from_bsym()])
+                                grad_proxy_map[p.name] = new_grad
+                                self.write(new_grad, new_grad)
+                            elif nbsym.sym == prims.get_grad:
+                                p = nbsym.args[0]
+                                # TODO: set requires grad here!
+                                name = p.name
+                                current_grad = grad_proxy_map.get(name)
+                                if current_grad is not None:
+                                    # do we also need to map?
+                                    self.write(nbsym.output, current_grad)
+                                    self.swap_map[thunder.core.proxies.variableify(nbsym.output)] = current_grad
+                                    # XXX_replace_output_with_current_grad
+                                elif name in output_proxy_names:
+                                    new_grad = self.add_processed_bsyms([nbsym.from_bsym()])
+                                    grad_proxy_map[name] = new_grad
+                                # elif KNOWN proxy:
+                                #    ### TODO: it can happen that an intermediate does not have put_grad, e.g. first arg to where
+                                else:
+                                    raise RuntimeError(f"grad of non-output and non-intermediate {name} requested")
+                            else:
+                                self.add_processed_bsyms([nbsym.from_bsym()])
                 self.collected_bw_part_bsyms.clear()
 
                 grad_flat_args = []
@@ -150,8 +159,9 @@ def grad_transform_on_trace(trace, /, *args, **kwargs):
                             grad_inps = [grad_inps]
 
                         flat_inps = args
-
-                        for i, gi in zip(flat_inps, grad_inps, strict=True):  # strict?
+                        # there may be non-gradient requiring additional args (todo: maybe only support this for non-tensor ones?)
+                        assert len(grad_inps) <= len(flat_inps)
+                        for i, gi in zip(flat_inps, grad_inps):
                             if isinstance(i, thunder.TensorProxy):
                                 prims.put_grad(i, gi)
                         return res
@@ -177,7 +187,7 @@ def grad_transform_on_trace(trace, /, *args, **kwargs):
 
                 self.add_processed_bsyms(forward_part_bsyms)
 
-                self.collected_bw_part_bsyms[:0] = backward_part_bsyms
+                self.collected_bw_part_bsyms.insert(0, backward_part_bsyms)
                 return
 
             # No gradient transform found, need to descend
