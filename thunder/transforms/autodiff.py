@@ -202,7 +202,7 @@ def grad_transform_on_trace(trace, /, *args, **kwargs):
 
     processor = AugmentedForwardProcessor(trace)
     trace, _ = processor()
-    # trace = thunder.core.transform_common.dce(trace)
+    trace = thunder.core.transform_common.dce(trace)
 
     end_time_ns = time.perf_counter_ns()
     elapsed_time_ns = end_time_ns - start_time_ns
@@ -235,6 +235,7 @@ def split_into_forward_and_backward(joint_trace):
         if any((o.name in forward_proxy_names) for o in bsym.flat_proxy_outs):
             forward_part_bsyms.insert(0, bsym.from_bsym())
             forward_proxy_names.update(a.name for a in bsym.flat_proxy_args)
+            forward_proxy_names.update(o.name for o in bsym.flat_proxy_outs)
             continue
 
         if bsym.sym == prims.get_grad:
