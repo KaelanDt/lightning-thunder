@@ -232,7 +232,7 @@ class LORATransform(Transform):
             elif bsym.sym == prims.python_return:
                 assert len(bsym.args) == 1 and isinstance(bsym.args[0], dict)
                 new_return_dict = bsym.args[0].copy()
-                new_return_dict['flat_args'] = list(new_computation_trace.args)  # we know that the args are flat
+                new_return_dict["flat_args"] = list(new_computation_trace.args)  # we know that the args are flat
                 new_computation_trace.bound_symbols.append(bsym.from_bsym(args=(new_return_dict,)))
             else:
                 new_computation_trace.bound_symbols.append(bsym.from_bsym())
