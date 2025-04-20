@@ -229,6 +229,9 @@ def split_into_forward_and_backward(joint_trace):
     output_pos = {o.name: i for i, o in enumerate(fw_output) if isinstance(o, thunder.TensorProxy)}
     forward_proxy_names = {o.name for o in thunder.core.pytree.tree_iter(fw_output) if isinstance(o, thunder.Proxy)}
 
+    # for inplace, we need to update this (or have flat args be the right thing?...)
+    forward_proxy_names.update(a.name for a in return_bsym.args[0]["flat_args"] if isinstance(a, thunder.Proxy))
+
     for bsym in reversed(joint_trace.bound_symbols):
         if bsym.sym == prims.python_return:
             continue
