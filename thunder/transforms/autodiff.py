@@ -105,7 +105,7 @@ def grad_transform_on_trace(trace, /, *args, **kwargs):
                 grad_flat_args = []
                 for p in bsym.args[0]["flat_args"]:
                     # or p = self.read(p) here?
-                    if isinstance(p, thunder.Proxy) and p.requires_grad and p.name in grad_proxy_map:
+                    if isinstance(p, thunder.TensorProxy) and p.requires_grad and p.name in grad_proxy_map:
                         # is it always OK if we don't have a gradient? (one case: unused input)
                         # result of put_grad???
                         grad_flat_args.append(grad_proxy_map[p.name])
