@@ -233,7 +233,8 @@ def split_into_forward_and_backward(joint_trace):
         if bsym.sym == prims.python_return:
             continue
 
-        if any((o.name in forward_proxy_names) for o in bsym.flat_proxy_outs):
+        # unpack_trivial is always a (forward trace) argument
+        if any((o.name in forward_proxy_names) for o in bsym.flat_proxy_outs) or bsym.sym == prims.unpack_trivial:
             forward_part_bsyms.insert(0, bsym.from_bsym())
             forward_proxy_names.update(a.name for a in bsym.flat_proxy_args)
             forward_proxy_names.update(o.name for o in bsym.flat_proxy_outs)
