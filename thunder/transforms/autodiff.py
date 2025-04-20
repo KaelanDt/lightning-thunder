@@ -58,7 +58,7 @@ def grad_transform_on_trace(trace, /, *args, **kwargs):
                     # (e.g. for `where(a * b > 0, a, b)` we do not need the grad components of a * b propagated
                     if any(
                         ((gg.name in grad_proxy_map) or (gg.name in output_proxy_names))
-                        for gg in (bs.args[0] for bs in bw_bsyms)
+                        for gg in (bs.args[0] for bs in bw_bsyms if bs.sym == prims.get_grad)
                     ):
                         for nbsym in bw_bsyms:
                             if nbsym.sym == prims.put_grad:
@@ -162,7 +162,8 @@ def grad_transform_on_trace(trace, /, *args, **kwargs):
                         # there may be non-gradient requiring additional args (todo: maybe only support this for non-tensor ones?)
                         assert len(grad_inps) <= len(flat_inps)
                         for i, gi in zip(flat_inps, grad_inps):
-                            if isinstance(i, thunder.TensorProxy):
+                            # for integer proxies etc. we expect gi to be None
+                            if isinstance(i, thunder.TensorProxy) and gi is not None:
                                 prims.put_grad(i, gi)
                         return res
 
